@@ -1,0 +1,65 @@
+<Project>
+  <!-- Only run for the web project -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'RdtClient.Web'">
+    <!-- Check for the  ProjectDir\client folder -->
+    <SpaClientDir>$([System.IO.Path]::GetFullPath('$(SolutionDir)..\client'))</SpaClientDir>
+    <SpaWwwRoot>$(MSBuildProjectDirectory)\wwwroot</SpaWwwRoot>
+
+    <!-- Angular config based on build configuration -->
+    <NgConfig Condition="'$(Configuration)'=='Debug'">development</NgConfig>
+    <NgConfig Condition="'$(NgConfig)'==''">production</NgConfig>
+    <AngularCliVersion>latest</AngularCliVersion>
+  </PropertyGroup>
+
+  <!-- Make VS rebuild when SPA sources change or when wwwroot\index.html is missing -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'RdtClient.Web'">
+    <UpToDateCheckInput Include="$(SpaClientDir)\package.json" />
+    <UpToDateCheckInput Include="$(SpaClientDir)\package-lock.json" Condition="Exists('$(SpaClientDir)\package-lock.json')" />
+    <UpToDateCheckInput Include="$(SpaClientDir)\angular.json" />
+    <UpToDateCheckInput Include="$(SpaClientDir)\src\**\*.*" Condition="Exists('$(SpaClientDir)\src')" />
+
+    <!-- Key change: mark these as 'built' outputs so missing files trigger a build -->
+    <UpToDateCheckBuilt Include="$(SpaWwwRoot)\index.html" />
+    <UpToDateCheckBuilt Include="$(OutputPath)wwwroot\index.html" />
+  </ItemGroup>
+
+  <!-- Build Angular before compiling the Web project -->
+<Target Name="BuildSpa"
+        Condition="'$(MSBuildProjectName)' == 'RdtClient.Web' And !Exists('$(SpaWwwRoot)')"
+        BeforeTargets="Build">
+  <Message Text="Building Angular SPA ($(NgConfig)) in '$(SpaClientDir)'" Importance="high" />
+
+  <!-- Change to client directory -->
+  <Exec Command='cd /d "$(SpaClientDir)"' />
+
+  <!-- Check if package.json exists -->
+  <Exec Condition="Exists('$(SpaClientDir)\package.json')"
+        Command='echo [SPA] package.json found' />
+
+  <Exec Condition="!Exists('$(SpaClientDir)\package.json')"
+        Command='echo [SPA] No package.json found. Skipping SPA build.' />
+
+  <!-- Install dependencies -->
+  <Exec Condition="Exists('$(SpaClientDir)\package-lock.json')"
+        Command='npm ci' WorkingDirectory="$(SpaClientDir)" />
+  <Exec Condition="!Exists('$(SpaClientDir)\package-lock.json')"
+        Command='npm install' WorkingDirectory="$(SpaClientDir)" />
+
+  <!-- Run Angular build -->
+  <Exec Condition="Exists('$(SpaClientDir)\node_modules\.bin\ng.cmd')"
+        Command='npx ng build -c $(NgConfig)' WorkingDirectory="$(SpaClientDir)" />
+  <Exec Condition="!Exists('$(SpaClientDir)\node_modules\.bin\ng.cmd')"
+        Command='npx --yes @angular/cli@$(AngularCliVersion) build -c $(NgConfig)' WorkingDirectory="$(SpaClientDir)" />
+</Target>
+
+  <!-- Copy project wwwroot to bin\[Configuration]\net9.0\wwwroot using XCOPY -->
+  <Target Name="CopyWwwrootToOutput"
+          Condition="'$(MSBuildProjectName)' == 'RdtClient.Web'"
+          AfterTargets="Build">
+    <Message Text="Copying project wwwroot to $(OutputPath)wwwroot using xcopy..." Importance="high" />
+    <MakeDir Directories="$(OutputPath)wwwroot" />
+    <Exec
+      IgnoreExitCode="true"
+      Command='cmd /c rmdir /s /q "$(OutputPath)wwwroot" 2&gt;nul &amp; mkdir "$(OutputPath)wwwroot" &amp; xcopy "$(SpaWwwRoot)\*" "$(OutputPath)wwwroot\" /E /I /Y' />
+  </Target>
+</Project>

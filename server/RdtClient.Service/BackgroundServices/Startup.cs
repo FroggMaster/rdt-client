@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RdtClient.Data.Data;
+using RdtClient.Data.Models.Internal;
 using RdtClient.Service.Services;
 
 
@@ -20,7 +21,13 @@ public class Startup(IServiceProvider serviceProvider) : IHostedService
         using var scope = serviceProvider.CreateScope();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Startup>>();
 
-        logger.LogWarning("Starting host on version {version}", version);
+        var appSettings = scope.ServiceProvider.GetRequiredService<AppSettings>();
+        var basePath = String.IsNullOrWhiteSpace(appSettings.BasePath)
+            ? ""
+            : "/" + appSettings.BasePath.Trim('/');
+
+        var url = $"http://0.0.0.0:{appSettings.Port}{basePath}";
+        logger.LogWarning("Starting host on {url} (version {version})", url, version);
 
         var dbContext = scope.ServiceProvider.GetRequiredService<DataContext>();
         await dbContext.Database.MigrateAsync(cancellationToken);
